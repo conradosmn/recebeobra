@@ -1,0 +1,8 @@
+Salve a logo OFICIAL VERTICAL do TCE-PI nesta pasta com o nome:
+
+    logo-tce.png
+
+Ela aparece na tela de login, no cabeçalho do app e no topo do PDF.
+Recomendado: PNG com fundo transparente, ~600px de largura.
+Se preferir SVG, salve como logo-tce.svg e ajuste o src em
+src/components/logo-tce.tsx e em src/lib/pdf.ts.
