@@ -21,7 +21,6 @@ export function PainelAdmin({
   obras: Obra[];
 }) {
   const router = useRouter();
-
   const [estEmail, actEmail, loadEmail] = useActionState(adicionarEmail, {});
   const [estObra, actObra, loadObra] = useActionState(adicionarObra, {});
 

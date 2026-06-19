@@ -2,21 +2,26 @@
 
 import { useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { Camera, FileDown, Loader2, Plus, Trash2 } from "lucide-react";
+import { Camera, FileDown, ImageIcon, Link2, Loader2, Plus, Trash2, X } from "lucide-react";
 import { adicionarRegistro, excluirRegistro } from "@/actions/registros";
+import { vincularRegistroServico } from "@/actions/servicos";
 import { gerarPdf } from "@/lib/pdf";
+import type { Servico } from "@/components/mural-servicos";
+import { ServicoPicker } from "@/components/servico-picker";
 
 type Registro = {
   id: string;
   descricao: string;
   foto_data: string;
   criado_em: string;
+  servico_id: string | null;
 };
 
 type Props = {
   obra: { id: string; nome: string };
   autor: string;
   inicial: Registro[];
+  servicos: Servico[];
 };
 
 // Redimensiona/comprime a foto da câmera para um JPEG leve (dataURL).
@@ -50,14 +55,28 @@ function comprimir(file: File, maxLado = 1280, qualidade = 0.7): Promise<string>
   });
 }
 
-export function RegistrosObra({ obra, autor, inicial }: Props) {
+export function RegistrosObra({ obra, autor, inicial, servicos }: Props) {
   const router = useRouter();
-  const inputRef = useRef<HTMLInputElement>(null);
+  const cameraRef = useRef<HTMLInputElement>(null);
+  const galeriaRef = useRef<HTMLInputElement>(null);
   const [foto, setFoto] = useState<string | null>(null);
   const [descricao, setDescricao] = useState("");
   const [erro, setErro] = useState<string | null>(null);
   const [salvando, iniciarSalvar] = useTransition();
   const [gerando, setGerando] = useState(false);
+  // Id do registro cujo seletor de serviço está aberto.
+  const [vinculando, setVinculando] = useState<string | null>(null);
+
+  const servicoPorId = new Map(servicos.map((s) => [s.id, s]));
+
+  function aoVincular(registroId: string, servicoId: string | null) {
+    setVinculando(null);
+    iniciarSalvar(async () => {
+      const r = await vincularRegistroServico(registroId, servicoId, obra.id);
+      if (r.erro) return setErro(r.erro);
+      router.refresh();
+    });
+  }
 
   async function aoSelecionarFoto(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
@@ -68,7 +87,8 @@ export function RegistrosObra({ obra, autor, inicial }: Props) {
     } catch {
       setErro("Não foi possível processar a foto.");
     } finally {
-      if (inputRef.current) inputRef.current.value = "";
+      if (cameraRef.current) cameraRef.current.value = "";
+      if (galeriaRef.current) galeriaRef.current.value = "";
     }
   }
 
@@ -98,7 +118,16 @@ export function RegistrosObra({ obra, autor, inicial }: Props) {
     setGerando(true);
     setErro(null);
     try {
-      await gerarPdf({ obra: obra.nome, autor, registros: inicial });
+      const registros = inicial.map((r) => {
+        const s = r.servico_id ? servicoPorId.get(r.servico_id) : null;
+        return {
+          descricao: r.descricao,
+          foto_data: r.foto_data,
+          criado_em: r.criado_em,
+          servico: s ? `${s.item} - ${s.descricao}` : null,
+        };
+      });
+      await gerarPdf({ obra: obra.nome, autor, registros });
     } catch {
       setErro("Falha ao gerar o PDF.");
     } finally {
@@ -111,10 +140,17 @@ export function RegistrosObra({ obra, autor, inicial }: Props) {
       {/* Captura */}
       <div className="bg-white border border-gray-200 rounded-xl p-4 space-y-3">
         <input
-          ref={inputRef}
+          ref={cameraRef}
           type="file"
           accept="image/*"
           capture="environment"
+          onChange={aoSelecionarFoto}
+          className="hidden"
+        />
+        <input
+          ref={galeriaRef}
+          type="file"
+          accept="image/*"
           onChange={aoSelecionarFoto}
           className="hidden"
         />
@@ -127,24 +163,43 @@ export function RegistrosObra({ obra, autor, inicial }: Props) {
             className="w-full rounded-lg border border-gray-200 max-h-72 object-contain bg-gray-50"
           />
         ) : (
-          <button
-            type="button"
-            onClick={() => inputRef.current?.click()}
-            className="w-full flex flex-col items-center justify-center gap-2 border-2 border-dashed border-gray-300 rounded-lg py-10 text-gray-500 hover:border-[var(--tce-azul)] hover:text-[var(--tce-azul)] transition"
-          >
-            <Camera size={28} />
-            <span className="text-sm font-medium">Tirar foto</span>
-          </button>
+          <div className="grid grid-cols-2 gap-3">
+            <button
+              type="button"
+              onClick={() => cameraRef.current?.click()}
+              className="flex flex-col items-center justify-center gap-2 border-2 border-dashed border-gray-300 rounded-lg py-10 text-gray-500 hover:border-[var(--tce-azul)] hover:text-[var(--tce-azul)] transition"
+            >
+              <Camera size={28} />
+              <span className="text-sm font-medium">Tirar foto</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => galeriaRef.current?.click()}
+              className="flex flex-col items-center justify-center gap-2 border-2 border-dashed border-gray-300 rounded-lg py-10 text-gray-500 hover:border-[var(--tce-azul)] hover:text-[var(--tce-azul)] transition"
+            >
+              <ImageIcon size={28} />
+              <span className="text-sm font-medium">Galeria</span>
+            </button>
+          </div>
         )}
 
         {foto && (
-          <button
-            type="button"
-            onClick={() => inputRef.current?.click()}
-            className="text-xs text-[var(--tce-azul)] underline"
-          >
-            Trocar foto
-          </button>
+          <div className="flex gap-4">
+            <button
+              type="button"
+              onClick={() => cameraRef.current?.click()}
+              className="text-xs text-[var(--tce-azul)] underline"
+            >
+              Tirar outra foto
+            </button>
+            <button
+              type="button"
+              onClick={() => galeriaRef.current?.click()}
+              className="text-xs text-[var(--tce-azul)] underline"
+            >
+              Escolher da galeria
+            </button>
+          </div>
         )}
 
         <textarea
@@ -222,11 +277,71 @@ export function RegistrosObra({ obra, autor, inicial }: Props) {
                     <Trash2 size={16} />
                   </button>
                 </div>
+
+                {servicos.length > 0 && (
+                  <div className="px-3 pb-3 -mt-1">
+                    {(() => {
+                      const s = r.servico_id ? servicoPorId.get(r.servico_id) : undefined;
+                      if (!s) {
+                        return (
+                          <button
+                            type="button"
+                            onClick={() => setVinculando(r.id)}
+                            className="inline-flex items-center gap-1.5 text-xs rounded-lg px-2 py-1.5 border border-dashed border-gray-300 text-gray-500 hover:border-[var(--tce-azul)] hover:text-[var(--tce-azul)]"
+                          >
+                            <Link2 size={14} className="shrink-0" />
+                            <span>Vincular a serviço</span>
+                          </button>
+                        );
+                      }
+                      return (
+                        <div className="flex items-start gap-1.5 text-xs rounded-lg bg-[var(--tce-azul)]/10 text-[var(--tce-azul)] pl-2 pr-1 py-1.5">
+                          <Link2 size={14} className="shrink-0 mt-0.5" />
+                          <button
+                            type="button"
+                            onClick={() => setVinculando(r.id)}
+                            className="text-left min-w-0 flex-1 hover:underline"
+                            title="Trocar serviço"
+                          >
+                            <span className="font-mono font-semibold">{s.item}</span>{" "}
+                            <span className="line-clamp-1">{s.descricao}</span>
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setVinculando(r.id)}
+                            className="shrink-0 underline whitespace-nowrap px-1"
+                            title="Trocar serviço"
+                          >
+                            Trocar
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => aoVincular(r.id, null)}
+                            className="shrink-0 text-[var(--tce-azul)]/70 hover:text-red-600"
+                            aria-label="Remover vínculo"
+                            title="Remover vínculo"
+                          >
+                            <X size={14} />
+                          </button>
+                        </div>
+                      );
+                    })()}
+                  </div>
+                )}
               </li>
             ))}
           </ul>
         )}
       </div>
+
+      {vinculando && (
+        <ServicoPicker
+          servicos={servicos}
+          atualId={inicial.find((r) => r.id === vinculando)?.servico_id ?? null}
+          onSelecionar={(servicoId) => aoVincular(vinculando, servicoId)}
+          onFechar={() => setVinculando(null)}
+        />
+      )}
     </div>
   );
 }

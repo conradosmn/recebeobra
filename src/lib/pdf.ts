@@ -1,6 +1,11 @@
 import { jsPDF } from "jspdf";
 
-type Registro = { descricao: string; foto_data: string; criado_em: string };
+type Registro = {
+  descricao: string;
+  foto_data: string;
+  criado_em: string;
+  servico?: string | null;
+};
 
 type Dados = {
   obra: string;
@@ -76,42 +81,82 @@ export async function gerarPdf({ obra, autor, registros }: Dados): Promise<void>
   doc.setDrawColor(210).line(margin, y, pageW - margin, y);
   y += 6;
 
-  // --- Registros ---
+  // --- Registros (grade 2 colunas x 2 linhas = 4 por página) ---
+  const colGap = 8;
+  const cellW = (maxW - colGap) / 2; // largura de cada coluna
+  const servFont = 8; // item do serviço vinculado (acima da foto)
+  const servLineH = 3.2;
+  const maxServLinhas = 2;
+  const servBlockH = maxServLinhas * servLineH; // espaço reservado acima da foto
+  const gapServImg = 2;
+  const imgAreaH = 76; // altura reservada para a foto em cada célula
+  const gapImgText = 4; // espaço entre foto e descrição
+  const descFont = 9;
+  const lineH = 3.6;
+  const maxDescLinhas = 3; // descrição limitada para manter a grade alinhada
+  const rowH = servBlockH + gapServImg + imgAreaH + gapImgText + maxDescLinhas * lineH + 6;
+
+  let gridTop = y; // topo da grade (após o cabeçalho na 1ª página)
+
   for (let i = 0; i < registros.length; i++) {
+    const slot = i % 4;
+    if (slot === 0 && i > 0) {
+      doc.addPage();
+      gridTop = margin;
+    }
+    const col = slot % 2;
+    const row = Math.floor(slot / 2);
+    const cellX = margin + col * (cellW + colGap);
+    const cellY = gridTop + row * rowH;
+
     const r = registros[i];
     const img = await carregarImagem(r.foto_data);
 
-    let imgW = maxW;
-    let imgH = 90;
-    if (img) {
-      imgH = (imgW * img.h) / img.w;
-      const maxImgH = 115;
-      if (imgH > maxImgH) {
-        imgH = maxImgH;
-        imgW = (imgH * img.w) / img.h;
+    // Serviço vinculado (item) acima da foto, em destaque.
+    if (r.servico) {
+      doc.setFont("helvetica", "bold").setFontSize(servFont).setTextColor(43, 58, 143);
+      let serv: string[] = doc.splitTextToSize(r.servico, cellW);
+      if (serv.length > maxServLinhas) {
+        serv = serv.slice(0, maxServLinhas);
+        serv[maxServLinhas - 1] = serv[maxServLinhas - 1].replace(/.$/, "") + "…";
       }
+      doc.text(serv, cellX + cellW / 2, cellY + servLineH, {
+        align: "center",
+        lineHeightFactor: 1.2,
+      });
     }
 
-    const linhas = doc.splitTextToSize(r.descricao, maxW);
-    const blocoH = 6 + imgH + 4 + linhas.length * 5 + 8;
+    const imgTop = cellY + servBlockH + gapServImg;
 
-    if (y + blocoH > pageH - margin) {
-      doc.addPage();
-      y = margin;
-    }
-
-    doc.setFont("helvetica", "bold").setFontSize(11).setTextColor(43, 58, 143);
-    doc.text(`Registro ${i + 1}`, margin, y);
-    y += 6;
-
+    // Foto: encaixada (contain) e centralizada na área da célula.
     if (img) {
-      doc.addImage(r.foto_data, "JPEG", margin + (maxW - imgW) / 2, y, imgW, imgH);
+      let iw = cellW;
+      let ih = (cellW * img.h) / img.w;
+      if (ih > imgAreaH) {
+        ih = imgAreaH;
+        iw = (imgAreaH * img.w) / img.h;
+      }
+      doc.addImage(
+        r.foto_data,
+        "JPEG",
+        cellX + (cellW - iw) / 2,
+        imgTop + (imgAreaH - ih) / 2,
+        iw,
+        ih
+      );
     }
-    y += imgH + 4;
 
-    doc.setFont("helvetica", "normal").setFontSize(10).setTextColor(40, 40, 40);
-    doc.text(linhas, margin, y);
-    y += linhas.length * 5 + 8;
+    // Descrição (numerada) logo abaixo da foto, alinhada na base da área.
+    doc.setFont("helvetica", "normal").setFontSize(descFont).setTextColor(40, 40, 40);
+    let linhas: string[] = doc.splitTextToSize(`${i + 1}. ${r.descricao}`, cellW);
+    if (linhas.length > maxDescLinhas) {
+      linhas = linhas.slice(0, maxDescLinhas);
+      linhas[maxDescLinhas - 1] = linhas[maxDescLinhas - 1].replace(/.$/, "") + "…";
+    }
+    doc.text(linhas, cellX + cellW / 2, imgTop + imgAreaH + gapImgText, {
+      align: "center",
+      lineHeightFactor: 1.2,
+    });
   }
 
   // --- Rodapé com paginação ---

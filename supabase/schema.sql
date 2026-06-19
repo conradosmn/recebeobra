@@ -38,10 +38,29 @@ create table if not exists registros (
 create index if not exists registros_obra_autor_idx
   on registros (obra_id, autor_email, criado_em);
 
+-- Mural de serviços: itens da planilha orçamentária (cascata 1, 1.1, ...) -
+create table if not exists servicos (
+  id          uuid primary key default gen_random_uuid(),
+  obra_id     uuid not null references obras(id) on delete cascade,
+  item        text not null,            -- ex.: "1", "1.1", "1.1.1"
+  descricao   text not null,
+  unidade     text,
+  quantidade  numeric,
+  ordem       int not null default 0,   -- ordem de leitura na planilha (cascata)
+  criado_em   timestamptz not null default now()
+);
+
+create index if not exists servicos_obra_idx on servicos (obra_id, ordem);
+
+-- Vínculo opcional de uma foto a um serviço do mural ---------------------
+alter table registros
+  add column if not exists servico_id uuid references servicos(id) on delete set null;
+
 -- RLS ligado, sem políticas: bloqueia acesso direto via anon key --------
 alter table usuarios_permitidos enable row level security;
 alter table obras               enable row level security;
 alter table registros           enable row level security;
+alter table servicos            enable row level security;
 
 -- Admin inicial ---------------------------------------------------------
 insert into usuarios_permitidos (email, nome, is_admin)

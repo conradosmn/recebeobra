@@ -4,6 +4,7 @@ import { supabaseAdmin } from "@/lib/supabase";
 import { getSessao } from "@/lib/auth";
 import { ArrowLeft } from "lucide-react";
 import { RegistrosObra } from "@/components/registros-obra";
+import { MuralServicos } from "@/components/mural-servicos";
 
 export const dynamic = "force-dynamic";
 
@@ -26,10 +27,16 @@ export default async function ObraPage({
 
   const { data: registros } = await supabaseAdmin
     .from("registros")
-    .select("id, descricao, foto_data, criado_em")
+    .select("id, descricao, foto_data, criado_em, servico_id")
     .eq("obra_id", id)
     .eq("autor_email", sessao.email)
     .order("criado_em", { ascending: true });
+
+  const { data: servicos } = await supabaseAdmin
+    .from("servicos")
+    .select("id, item, descricao, unidade, quantidade")
+    .eq("obra_id", id)
+    .order("ordem", { ascending: true });
 
   return (
     <div>
@@ -45,11 +52,20 @@ export default async function ObraPage({
         <p className="text-sm text-gray-500 mb-5">{obra.descricao}</p>
       )}
 
-      <RegistrosObra
-        obra={{ id: obra.id, nome: obra.nome }}
-        autor={sessao.email}
-        inicial={registros ?? []}
-      />
+      <div className="space-y-6">
+        <MuralServicos
+          obraId={obra.id}
+          isAdmin={sessao.isAdmin}
+          servicos={servicos ?? []}
+        />
+
+        <RegistrosObra
+          obra={{ id: obra.id, nome: obra.nome }}
+          autor={sessao.email}
+          inicial={registros ?? []}
+          servicos={servicos ?? []}
+        />
+      </div>
     </div>
   );
 }
