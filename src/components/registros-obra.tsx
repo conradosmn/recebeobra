@@ -260,7 +260,7 @@ export function RegistrosObra({ obra, autor, inicial, servicos }: Props) {
                 className="flex items-center gap-1.5 rounded-lg border border-red-300 text-red-600 hover:bg-red-600 hover:text-white font-semibold px-3 py-2 text-sm transition disabled:opacity-40"
               >
                 <Trash2 size={16} />
-                Apagar todas
+                Apagar Registros
               </button>
             )}
             <button
