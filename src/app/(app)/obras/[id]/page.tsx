@@ -57,6 +57,7 @@ export default async function ObraPage({
           obraId={obra.id}
           isAdmin={sessao.isAdmin}
           servicos={servicos ?? []}
+          registros={registros ?? []}
         />
 
         <RegistrosObra

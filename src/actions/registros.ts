@@ -7,7 +7,8 @@ import { getSessao } from "@/lib/auth";
 export async function adicionarRegistro(
   obraId: string,
   descricao: string,
-  fotoData: string
+  fotoData: string,
+  servicoId?: string | null
 ): Promise<{ erro?: string }> {
   const sessao = await getSessao();
   if (!sessao) return { erro: "Sessão expirada. Entre novamente." };
@@ -21,6 +22,7 @@ export async function adicionarRegistro(
     autor_email: sessao.email,
     descricao: desc,
     foto_data: fotoData,
+    servico_id: servicoId ?? null,
   });
 
   if (error) return { erro: "Não foi possível salvar o registro." };
@@ -44,6 +46,30 @@ export async function excluirRegistro(
     .eq("autor_email", sessao.email);
 
   if (error) return { erro: "Não foi possível excluir." };
+
+  revalidatePath(`/obras/${obraId}`);
+  return {};
+}
+
+// Edita a descrição de um registro do próprio autor.
+export async function editarDescricaoRegistro(
+  registroId: string,
+  descricao: string,
+  obraId: string
+): Promise<{ erro?: string }> {
+  const sessao = await getSessao();
+  if (!sessao) return { erro: "Sessão expirada. Entre novamente." };
+
+  const desc = descricao.trim();
+  if (!desc) return { erro: "A descrição não pode ficar vazia." };
+
+  const { error } = await supabaseAdmin
+    .from("registros")
+    .update({ descricao: desc })
+    .eq("id", registroId)
+    .eq("autor_email", sessao.email);
+
+  if (error) return { erro: "Não foi possível salvar a descrição." };
 
   revalidatePath(`/obras/${obraId}`);
   return {};

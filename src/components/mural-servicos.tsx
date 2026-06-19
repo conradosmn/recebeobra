@@ -3,6 +3,7 @@
 import { useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import {
+  Camera,
   ChevronDown,
   ChevronRight,
   ListTree,
@@ -12,6 +13,7 @@ import {
 } from "lucide-react";
 import { extrairServicos } from "@/lib/planilha";
 import { importarServicos, limparServicos } from "@/actions/servicos";
+import { ServicoFotoModal } from "@/components/servico-foto-modal";
 
 export type Servico = {
   id: string;
@@ -21,10 +23,18 @@ export type Servico = {
   quantidade: number | null;
 };
 
+type RegistroMin = {
+  id: string;
+  descricao: string;
+  foto_data: string;
+  servico_id: string | null;
+};
+
 type Props = {
   obraId: string;
   isAdmin: boolean;
   servicos: Servico[];
+  registros: RegistroMin[];
 };
 
 function itemPai(item: string): string {
@@ -33,7 +43,7 @@ function itemPai(item: string): string {
 
 const fmtQtd = new Intl.NumberFormat("pt-BR", { maximumFractionDigits: 2 });
 
-export function MuralServicos({ obraId, isAdmin, servicos }: Props) {
+export function MuralServicos({ obraId, isAdmin, servicos, registros }: Props) {
   const router = useRouter();
   const fileRef = useRef<HTMLInputElement>(null);
   const [aberto, setAberto] = useState(false);
@@ -41,6 +51,17 @@ export function MuralServicos({ obraId, isAdmin, servicos }: Props) {
   const [erro, setErro] = useState<string | null>(null);
   const [msg, setMsg] = useState<string | null>(null);
   const [expandido, setExpandido] = useState<Set<string>>(new Set());
+  // Serviço (folha) cujo painel de vincular foto está aberto.
+  const [vinculando, setVinculando] = useState<Servico | null>(null);
+
+  // Quantas fotos estão vinculadas a cada serviço.
+  const contagemPorServico = useMemo(() => {
+    const m = new Map<string, number>();
+    for (const r of registros) {
+      if (r.servico_id) m.set(r.servico_id, (m.get(r.servico_id) ?? 0) + 1);
+    }
+    return m;
+  }, [registros]);
 
   // Monta a árvore em cascata a partir da lista achatada (ordenada por `ordem`).
   const { filhosDe, raizes } = useMemo(() => {
@@ -150,6 +171,26 @@ export function MuralServicos({ obraId, isAdmin, servicos }: Props) {
               </span>
             )}
           </span>
+
+          {!tem &&
+            (() => {
+              const n = contagemPorServico.get(s.id) ?? 0;
+              return (
+                <button
+                  type="button"
+                  onClick={() => setVinculando(s)}
+                  className={`shrink-0 inline-flex items-center gap-1 rounded-lg px-2 py-1 text-xs ${
+                    n > 0
+                      ? "bg-[var(--tce-azul)]/10 text-[var(--tce-azul)]"
+                      : "border border-gray-200 text-gray-400 hover:border-[var(--tce-azul)] hover:text-[var(--tce-azul)]"
+                  }`}
+                  title="Vincular foto a este serviço"
+                >
+                  <Camera size={14} />
+                  {n > 0 && <span className="font-semibold">{n}</span>}
+                </button>
+              );
+            })()}
         </div>
 
         {tem && exp && (
@@ -261,6 +302,15 @@ export function MuralServicos({ obraId, isAdmin, servicos }: Props) {
             </>
           )}
         </div>
+      )}
+
+      {vinculando && (
+        <ServicoFotoModal
+          obraId={obraId}
+          servico={vinculando}
+          registros={registros}
+          onFechar={() => setVinculando(null)}
+        />
       )}
     </div>
   );

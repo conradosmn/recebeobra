@@ -2,14 +2,27 @@
 
 import { useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { Camera, FileDown, ImageIcon, Link2, Loader2, Plus, Trash2, X } from "lucide-react";
+import {
+  Camera,
+  Check,
+  FileDown,
+  ImageIcon,
+  Link2,
+  Loader2,
+  Pencil,
+  Plus,
+  Trash2,
+  X,
+} from "lucide-react";
 import {
   adicionarRegistro,
+  editarDescricaoRegistro,
   excluirRegistro,
   excluirTodosRegistros,
 } from "@/actions/registros";
 import { vincularRegistroServico } from "@/actions/servicos";
 import { gerarPdf } from "@/lib/pdf";
+import { comprimir } from "@/lib/imagem";
 import type { Servico } from "@/components/mural-servicos";
 import { ServicoPicker } from "@/components/servico-picker";
 
@@ -28,37 +41,6 @@ type Props = {
   servicos: Servico[];
 };
 
-// Redimensiona/comprime a foto da câmera para um JPEG leve (dataURL).
-function comprimir(file: File, maxLado = 1280, qualidade = 0.7): Promise<string> {
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onload = () => {
-      const img = new Image();
-      img.onload = () => {
-        let { width, height } = img;
-        if (width > height && width > maxLado) {
-          height = Math.round((height * maxLado) / width);
-          width = maxLado;
-        } else if (height >= width && height > maxLado) {
-          width = Math.round((width * maxLado) / height);
-          height = maxLado;
-        }
-        const canvas = document.createElement("canvas");
-        canvas.width = width;
-        canvas.height = height;
-        const ctx = canvas.getContext("2d");
-        if (!ctx) return reject(new Error("canvas"));
-        ctx.drawImage(img, 0, 0, width, height);
-        resolve(canvas.toDataURL("image/jpeg", qualidade));
-      };
-      img.onerror = reject;
-      img.src = reader.result as string;
-    };
-    reader.onerror = reject;
-    reader.readAsDataURL(file);
-  });
-}
-
 export function RegistrosObra({ obra, autor, inicial, servicos }: Props) {
   const router = useRouter();
   const cameraRef = useRef<HTMLInputElement>(null);
@@ -70,6 +52,20 @@ export function RegistrosObra({ obra, autor, inicial, servicos }: Props) {
   const [gerando, setGerando] = useState(false);
   // Id do registro cujo seletor de serviço está aberto.
   const [vinculando, setVinculando] = useState<string | null>(null);
+  // Edição de descrição: id do registro em edição e texto atual.
+  const [editandoId, setEditandoId] = useState<string | null>(null);
+  const [editTexto, setEditTexto] = useState("");
+
+  function salvarDescricao(id: string) {
+    if (!editTexto.trim()) return setErro("A descrição não pode ficar vazia.");
+    setErro(null);
+    iniciarSalvar(async () => {
+      const r = await editarDescricaoRegistro(id, editTexto, obra.id);
+      if (r.erro) return setErro(r.erro);
+      setEditandoId(null);
+      router.refresh();
+    });
+  }
 
   const servicoPorId = new Map(servicos.map((s) => [s.id, s]));
 
@@ -296,17 +292,64 @@ export function RegistrosObra({ obra, autor, inicial, servicos }: Props) {
                   <span className="shrink-0 text-xs font-bold text-[var(--tce-azul)] bg-[var(--tce-azul)]/10 rounded px-2 py-0.5">
                     {i + 1}
                   </span>
-                  <p className="text-sm text-gray-800 flex-1 whitespace-pre-wrap">
-                    {r.descricao}
-                  </p>
-                  <button
-                    type="button"
-                    onClick={() => remover(r.id)}
-                    className="shrink-0 text-gray-400 hover:text-red-600"
-                    aria-label="Excluir"
-                  >
-                    <Trash2 size={16} />
-                  </button>
+
+                  {editandoId === r.id ? (
+                    <div className="flex-1 space-y-2">
+                      <textarea
+                        value={editTexto}
+                        onChange={(e) => setEditTexto(e.target.value)}
+                        rows={3}
+                        autoFocus
+                        className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[var(--tce-azul)]"
+                      />
+                      <div className="flex gap-2">
+                        <button
+                          type="button"
+                          onClick={() => salvarDescricao(r.id)}
+                          disabled={salvando}
+                          className="inline-flex items-center gap-1.5 rounded-lg bg-[var(--tce-azul)] hover:bg-[var(--tce-azul-escuro)] text-white text-xs font-semibold px-3 py-1.5 disabled:opacity-60"
+                        >
+                          <Check size={14} /> Salvar
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setEditandoId(null)}
+                          className="inline-flex items-center gap-1.5 rounded-lg border border-gray-300 text-gray-600 text-xs px-3 py-1.5 hover:bg-gray-50"
+                        >
+                          Cancelar
+                        </button>
+                      </div>
+                    </div>
+                  ) : (
+                    <p className="text-sm text-gray-800 flex-1 whitespace-pre-wrap">
+                      {r.descricao}
+                    </p>
+                  )}
+
+                  {editandoId !== r.id && (
+                    <div className="shrink-0 flex items-start gap-2">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setEditandoId(r.id);
+                          setEditTexto(r.descricao);
+                          setErro(null);
+                        }}
+                        className="text-gray-400 hover:text-[var(--tce-azul)]"
+                        aria-label="Editar descrição"
+                      >
+                        <Pencil size={16} />
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => remover(r.id)}
+                        className="text-gray-400 hover:text-red-600"
+                        aria-label="Excluir"
+                      >
+                        <Trash2 size={16} />
+                      </button>
+                    </div>
+                  )}
                 </div>
 
                 {servicos.length > 0 && (
