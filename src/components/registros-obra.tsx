@@ -3,7 +3,11 @@
 import { useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { Camera, FileDown, ImageIcon, Link2, Loader2, Plus, Trash2, X } from "lucide-react";
-import { adicionarRegistro, excluirRegistro } from "@/actions/registros";
+import {
+  adicionarRegistro,
+  excluirRegistro,
+  excluirTodosRegistros,
+} from "@/actions/registros";
 import { vincularRegistroServico } from "@/actions/servicos";
 import { gerarPdf } from "@/lib/pdf";
 import type { Servico } from "@/components/mural-servicos";
@@ -109,6 +113,20 @@ export function RegistrosObra({ obra, autor, inicial, servicos }: Props) {
     if (!confirm("Excluir este registro?")) return;
     iniciarSalvar(async () => {
       const r = await excluirRegistro(id, obra.id);
+      if (r.erro) return setErro(r.erro);
+      router.refresh();
+    });
+  }
+
+  function removerTodas() {
+    if (
+      !confirm(
+        `Apagar TODOS os ${inicial.length} registros desta obra? Esta ação não pode ser desfeita.`
+      )
+    )
+      return;
+    iniciarSalvar(async () => {
+      const r = await excluirTodosRegistros(obra.id);
       if (r.erro) return setErro(r.erro);
       router.refresh();
     });
@@ -233,15 +251,28 @@ export function RegistrosObra({ obra, autor, inicial, servicos }: Props) {
           <h2 className="text-sm font-bold text-gray-900">
             Meus registros ({inicial.length})
           </h2>
-          <button
-            type="button"
-            onClick={baixarPdf}
-            disabled={gerando || inicial.length === 0}
-            className="flex items-center gap-2 rounded-lg border border-[var(--tce-azul)] text-[var(--tce-azul)] hover:bg-[var(--tce-azul)] hover:text-white font-semibold px-3 py-2 text-sm transition disabled:opacity-40 disabled:hover:bg-transparent disabled:hover:text-[var(--tce-azul)]"
-          >
-            {gerando ? <Loader2 size={16} className="animate-spin" /> : <FileDown size={16} />}
-            Gerar PDF
-          </button>
+          <div className="flex items-center gap-2">
+            {inicial.length > 0 && (
+              <button
+                type="button"
+                onClick={removerTodas}
+                disabled={salvando}
+                className="flex items-center gap-1.5 rounded-lg border border-red-300 text-red-600 hover:bg-red-600 hover:text-white font-semibold px-3 py-2 text-sm transition disabled:opacity-40"
+              >
+                <Trash2 size={16} />
+                Apagar todas
+              </button>
+            )}
+            <button
+              type="button"
+              onClick={baixarPdf}
+              disabled={gerando || inicial.length === 0}
+              className="flex items-center gap-2 rounded-lg border border-[var(--tce-azul)] text-[var(--tce-azul)] hover:bg-[var(--tce-azul)] hover:text-white font-semibold px-3 py-2 text-sm transition disabled:opacity-40 disabled:hover:bg-transparent disabled:hover:text-[var(--tce-azul)]"
+            >
+              {gerando ? <Loader2 size={16} className="animate-spin" /> : <FileDown size={16} />}
+              Gerar PDF
+            </button>
+          </div>
         </div>
 
         {inicial.length === 0 ? (

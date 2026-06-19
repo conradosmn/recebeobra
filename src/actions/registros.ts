@@ -48,3 +48,22 @@ export async function excluirRegistro(
   revalidatePath(`/obras/${obraId}`);
   return {};
 }
+
+// Apaga todos os registros da obra do próprio autor de uma vez.
+export async function excluirTodosRegistros(
+  obraId: string
+): Promise<{ erro?: string }> {
+  const sessao = await getSessao();
+  if (!sessao) return { erro: "Sessão expirada. Entre novamente." };
+
+  const { error } = await supabaseAdmin
+    .from("registros")
+    .delete()
+    .eq("obra_id", obraId)
+    .eq("autor_email", sessao.email);
+
+  if (error) return { erro: "Não foi possível excluir os registros." };
+
+  revalidatePath(`/obras/${obraId}`);
+  return {};
+}
