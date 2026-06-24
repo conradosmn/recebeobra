@@ -50,38 +50,15 @@ function slug(s: string): string {
     .toLowerCase();
 }
 
-export async function gerarPdf({ obra, autor, registros }: Dados): Promise<void> {
-  const doc = new jsPDF({ unit: "mm", format: "a4" });
-  const pageW = doc.internal.pageSize.getWidth();
-  const pageH = doc.internal.pageSize.getHeight();
-  const margin = 15;
-  const maxW = pageW - margin * 2;
-
-  const logo = await carregarLogo();
-  let y = margin;
-
-  // --- Cabeçalho ---
-  if (logo) {
-    const w = 26;
-    const h = (w * logo.h) / logo.w;
-    doc.addImage(logo.data, "PNG", (pageW - w) / 2, y, w, h);
-    y += h + 4;
-  }
-  doc.setFont("helvetica", "bold").setFontSize(14).setTextColor(43, 58, 143);
-  doc.text("Recebimento Provisório - Anexo III", pageW / 2, y, { align: "center" });
-  y += 8;
-
-  doc.setFont("helvetica", "normal").setFontSize(10).setTextColor(40, 40, 40);
-  doc.text(`Obra: ${obra}`, margin, y);
-  y += 5;
-  doc.text(`Responsável: ${autor}`, margin, y);
-  y += 5;
-  doc.text(`Emitido em: ${new Date().toLocaleString("pt-BR")}`, margin, y);
-  y += 4;
-  doc.setDrawColor(210).line(margin, y, pageW - margin, y);
-  y += 6;
-
-  // --- Registros (grade 2 colunas x 2 linhas = 4 por página) ---
+// Desenha a grade de registros (2 colunas x 2 linhas = 4 por página) a
+// partir de `topoInicial`, quebrando página automaticamente.
+async function desenharGrade(
+  doc: jsPDF,
+  registros: Registro[],
+  margin: number,
+  maxW: number,
+  topoInicial: number
+): Promise<void> {
   const colGap = 8;
   const cellW = (maxW - colGap) / 2; // largura de cada coluna
   const servFont = 8; // item do serviço vinculado (acima da foto)
@@ -96,7 +73,7 @@ export async function gerarPdf({ obra, autor, registros }: Dados): Promise<void>
   const maxDescLinhas = 3; // descrição limitada para manter a grade alinhada
   const rowH = servBlockH + gapServImg + imgAreaH + gapImgText + maxDescLinhas * lineH + 6;
 
-  let gridTop = y; // topo da grade (após o cabeçalho na 1ª página)
+  let gridTop = topoInicial;
 
   for (let i = 0; i < registros.length; i++) {
     const slot = i % 4;
@@ -158,14 +135,92 @@ export async function gerarPdf({ obra, autor, registros }: Dados): Promise<void>
       lineHeightFactor: 1.2,
     });
   }
+}
 
-  // --- Rodapé com paginação ---
+// Desenha o cabeçalho (logo + título + obra/responsável/data) a partir da
+// margem e retorna o y onde a grade de fotos deve começar.
+async function desenharCabecalho(
+  doc: jsPDF,
+  pageW: number,
+  margin: number,
+  obra: string,
+  autor: string,
+  logo: Img | null
+): Promise<number> {
+  let y = margin;
+
+  if (logo) {
+    const w = 26;
+    const h = (w * logo.h) / logo.w;
+    doc.addImage(logo.data, "PNG", (pageW - w) / 2, y, w, h);
+    y += h + 4;
+  }
+  doc.setFont("helvetica", "bold").setFontSize(14).setTextColor(43, 58, 143);
+  doc.text("Recebimento Provisório - Anexo III", pageW / 2, y, { align: "center" });
+  y += 8;
+
+  doc.setFont("helvetica", "normal").setFontSize(10).setTextColor(40, 40, 40);
+  doc.text(`Obra: ${obra}`, margin, y);
+  y += 5;
+  doc.text(`Responsável: ${autor}`, margin, y);
+  y += 5;
+  doc.text(`Emitido em: ${new Date().toLocaleString("pt-BR")}`, margin, y);
+  y += 4;
+  doc.setDrawColor(210).line(margin, y, pageW - margin, y);
+  y += 6;
+
+  return y;
+}
+
+function numerarPaginas(doc: jsPDF, pageW: number, pageH: number): void {
   const total = doc.getNumberOfPages();
   for (let p = 1; p <= total; p++) {
     doc.setPage(p);
     doc.setFont("helvetica", "normal").setFontSize(8).setTextColor(150);
     doc.text(`Página ${p} de ${total}`, pageW / 2, pageH - 8, { align: "center" });
   }
+}
+
+export async function gerarPdf({ obra, autor, registros }: Dados): Promise<void> {
+  const doc = new jsPDF({ unit: "mm", format: "a4" });
+  const pageW = doc.internal.pageSize.getWidth();
+  const pageH = doc.internal.pageSize.getHeight();
+  const margin = 15;
+  const maxW = pageW - margin * 2;
+
+  const logo = await carregarLogo();
+  const y = await desenharCabecalho(doc, pageW, margin, obra, autor, logo);
+  await desenharGrade(doc, registros, margin, maxW, y);
+  numerarPaginas(doc, pageW, pageH);
 
   doc.save(`recebimento-anexo3-${slug(obra)}.pdf`);
+}
+
+// Relatório fotográfico de TODOS os usuários de uma obra: uma seção por
+// autor (cabeçalho + grade própria, sempre começando em página nova).
+export async function gerarPdfGeral({
+  obra,
+  secoes,
+}: {
+  obra: string;
+  secoes: { autor: string; registros: Registro[] }[];
+}): Promise<void> {
+  const doc = new jsPDF({ unit: "mm", format: "a4" });
+  const pageW = doc.internal.pageSize.getWidth();
+  const pageH = doc.internal.pageSize.getHeight();
+  const margin = 15;
+  const maxW = pageW - margin * 2;
+
+  const logo = await carregarLogo();
+
+  for (let i = 0; i < secoes.length; i++) {
+    if (i > 0) doc.addPage();
+    const secao = secoes[i];
+    const y = await desenharCabecalho(doc, pageW, margin, obra, secao.autor, logo);
+    await desenharGrade(doc, secao.registros, margin, maxW, y);
+  }
+
+  numerarPaginas(doc, pageW, pageH);
+
+  doc.save(`recebimento-anexo3-${slug(obra)}-geral.pdf`);
 }

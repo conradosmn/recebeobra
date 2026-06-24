@@ -5,6 +5,7 @@ import { getSessao } from "@/lib/auth";
 import { ArrowLeft } from "lucide-react";
 import { RegistrosObra } from "@/components/registros-obra";
 import { MuralServicos } from "@/components/mural-servicos";
+import { RelatorioGeral } from "@/components/relatorio-geral";
 
 export const dynamic = "force-dynamic";
 
@@ -53,6 +54,8 @@ export default async function ObraPage({
       )}
 
       <div className="space-y-6">
+        {sessao.isAdmin && <RelatorioGeral obraId={obra.id} obraNome={obra.nome} />}
+
         <MuralServicos
           obraId={obra.id}
           isAdmin={sessao.isAdmin}
